@@ -1,0 +1,21 @@
+[project]
+name = "audio-preprocessing"
+version = "1.0.0"
+description = "Minimal dataset preprocessing used by EpiAudio"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=5.0.0",
+    "requests>=2.32.0",
+    "torchcodec>=0.8.0",
+    "tqdm>=4.68.0",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["audio_preprocessing*"]
+
