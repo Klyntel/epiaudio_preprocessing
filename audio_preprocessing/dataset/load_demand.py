@@ -1,4 +1,11 @@
-"""DEMAND environmental-noise loader used by EpiAudio."""
+"""Load the DEMAND noise dataset into an AudioDataset.
+
+DEMAND extracts to ``<archive>/<ENV>/chNN.wav`` (e.g. ``DKITCHEN_16k/DKITCHEN/ch01.wav``).
+The label is the broad category derived from the environment's first letter.
+
+Run ``python -m audio_preprocessing.dataset.load_demand`` from the repo root to download a small subset
+and build the dataset.
+"""
 
 from pathlib import Path
 
@@ -7,6 +14,7 @@ from audio_preprocessing.dataset.base_loader import ZenodoLoader
 from audio_preprocessing.datasets import AudioDataset, LabelSource
 
 RECORD_ID = "1227121"
+
 CATEGORY_LABELS = {
     "D": "Domestic",
     "N": "Nature",
@@ -17,40 +25,52 @@ CATEGORY_LABELS = {
 }
 
 
-def collect(root: Path):
-    for archive in root.iterdir():
-        if not archive.is_dir():
+def collect(input_path):
+    """Yield ``(wav_path, category_label)`` for every channel WAV under ``input_path``.
+
+    Walks ``<archive>/<ENV>/chNN.wav`` and labels each file by the environment's category.
+    """
+    for archive_dir in input_path.iterdir():
+        if not archive_dir.is_dir():
             continue
-        for environment in archive.iterdir():
-            if not environment.is_dir() or environment.name[:1] not in CATEGORY_LABELS:
+        for env_dir in archive_dir.iterdir():
+            if not env_dir.is_dir():
                 continue
-            for path in environment.glob("*.wav"):
-                yield path, CATEGORY_LABELS[environment.name[0]]
+            label = CATEGORY_LABELS[env_dir.name[0]]
+            for file in env_dir.iterdir():
+                if file.is_file() and file.suffix == ".wav":
+                    yield file, label
 
 
 class DEMANDLoader(ZenodoLoader):
+    """Prepare and build the DEMAND environmental-noise dataset."""
+
     record_id = RECORD_ID
     label_source = LabelSource.GOLD
 
     def __init__(
         self,
-        root=None,
+        root: str | Path | None = None,
         *,
-        split_ratios=(0.8, 0.1),
-        seed=42,
-        only=None,
-        do_not_download=None,
-        prepare=True,
+        split_ratios: list[float] | tuple[float, float] = (0.8, 0.1),
+        seed: int = 42,
+        only: list[str] | None = None,
+        do_not_download: list[str] | None = None,
+        prepare: bool = True,
     ) -> None:
         super().__init__(
-            root, only=only, do_not_download=do_not_download, prepare=prepare
+            root=root,
+            only=only,
+            do_not_download=do_not_download,
+            prepare=prepare,
         )
         self.split_ratios = split_ratios
         self.seed = seed
 
     def build_dataset(self) -> AudioDataset:
         if self.root is None:
-            raise ValueError("DEMANDLoader requires a root path")
+            raise ValueError("DEMANDLoader needs a root path. Use prepare=False with an existing local root.")
+
         return build_audio_dataset(
             collect(self.root),
             self.split_ratios,
@@ -60,3 +80,14 @@ class DEMANDLoader(ZenodoLoader):
             label_source=self.label_source,
         )
 
+
+def main():
+    # Full DEMAND record (~7.4 GB: all 15 environments, 16k + 48k):
+    #   DEMANDLoader(do_not_download=["scripts"])()
+    # Small subset for testing transforms: two 16 kHz environments (~250 MB).
+    return DEMANDLoader(only=["DKITCHEN_16k", "NPARK_16k"])()
+
+
+if __name__ == "__main__":
+    demand = main()
+    print(demand.info())

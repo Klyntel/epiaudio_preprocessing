@@ -1,13 +1,15 @@
-"""UrbanSound8K loader used by EpiAudio."""
-
 from pathlib import Path
+from typing import Any, cast
 
 from datasets import load_dataset
+from tqdm import tqdm
 
-from audio_preprocessing.dataset._common import build_audio_record, splits_to_audio_dataset
 from audio_preprocessing.dataset.base_loader import ZenodoLoader
-from audio_preprocessing.datasets import AudioDataset, Event, LabelSource
+from audio_preprocessing.dataset._common import build_audio_record, splits_to_audio_dataset
+from audio_preprocessing.datasets import DATA_FEATURES, Event, AudioDataset, LabelSource
 
+
+SOURCE_DATASET = "ZenodoUrbanSound8k"
 RECORD_ID = "1203745"
 
 
@@ -16,30 +18,47 @@ class UrbanSoundLoader(ZenodoLoader):
     label_source = LabelSource.GOLD
 
     def build_dataset(self) -> AudioDataset:
-        if self.root is None:
-            raise ValueError("UrbanSoundLoader requires a root path")
-        root = Path(self.root) / "UrbanSound8K" / "UrbanSound8K"
-        metadata_path = Path("metadata/UrbanSound8K.csv")
-        raw = load_dataset("csv", data_files=str(root / metadata_path))["train"]
-        records = {}
-        for row in raw:
+        parent_path = Path(self.root) / "UrbanSound8K/UrbanSound8K"
+        csv_path = Path("metadata/UrbanSound8K.csv")
+
+        raw_ds = load_dataset("csv", data_files=str(parent_path / csv_path))
+
+        record_collect = {}
+        for raw_row in tqdm(raw_ds["train"], total=raw_ds["train"].num_rows):
+            row = cast(dict[str, Any], raw_row)
             fold = str(row["fold"])
-            label = str(row["class"])
-            path = root / "audio" / f"fold{fold}" / str(row["slice_file_name"])
-            if path not in records:
-                records[path] = build_audio_record(
-                    path,
-                    label,
+            class_name = str(row["class"])
+            start = float(row["start"])
+            end = float(row["end"])
+            file_path = parent_path / "audio" / f"fold{fold}" / str(row["slice_file_name"])
+            if file_path not in record_collect:
+                record_collect[file_path] = build_audio_record(
+                    file_path,
+                    class_name,
                     split="train",
-                    source_dataset="ZenodoUrbanSound8k",
-                    metadata_path=metadata_path,
+                    source_dataset=SOURCE_DATASET,
+                    metadata_path=str(csv_path),
+                    channel_format=None,
+                    environment=None,
                 )
-            elif label not in records[path]["class_list"]:
-                records[path]["class_list"].append(label)
-            records[path]["events"].append(
-                Event(label, float(row["start"]), float(row["end"]) - float(row["start"])).to_dict()
+            else:
+                record_collect[file_path]["class_list"].append(class_name)
+
+            record_collect[file_path]["events"].append(
+                Event(
+                    class_name,
+                    start,
+                    end - start,
+                ).to_dict()
             )
+
         return splits_to_audio_dataset(
-            {"train": records.values()}, label_source=self.label_source
+            {"train": record_collect.values()},
+            features=DATA_FEATURES,
+            label_source=self.label_source,
         )
 
+
+if __name__ == "__main__":
+    ub8k = UrbanSoundLoader()()
+    print(ub8k.info())
