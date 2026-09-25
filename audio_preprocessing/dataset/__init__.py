@@ -33,6 +33,9 @@ from audio_preprocessing.dataset import (
     load_vggsound,
     load_vocal_sound,
     load_voxpopuli,
+    load_anomalymachine50k,
+    load_locata,
+    load_starss23
 )
 
 __all__ = [
@@ -68,4 +71,7 @@ __all__ = [
     "load_vggsound",
     "load_vocal_sound",
     "load_voxpopuli",
+    "load_anomalymachine50k",
+    "load_locata",
+    "load_starss23"
 ]
